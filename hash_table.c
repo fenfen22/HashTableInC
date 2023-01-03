@@ -2,8 +2,12 @@
 #include<string.h>
 
 #include "hash_table.h"
+#include "prime.h"
 #define HT_PRIME_1 151
 #define HT_PRIME_2 163
+#define HT_INITIAL_BASE_SIZE 50
+
+static ht_element HT_DELETED_ELEMENT = {NULL, NULL};
 
 /*
 A hash table consist of an array of 'buckets', which stores a key-value pair(element).
@@ -49,14 +53,66 @@ static ht_element* ht_new_element(const char*k, const char* v) {
 //ht_new initialises a new hash table
 //size defines how many elements we can store
 //initiate the array of elements with calloc, which filles the allocated memory with NULL bytes
-ht_hash_table* ht_new() {
-	ht_hash_table* ht = malloc(sizeof(ht_hash_table));
 
-	ht->size = 53;
+// ht_hash_table* ht_new() {
+// 	ht_hash_table* ht = malloc(sizeof(ht_hash_table));
+
+// 	ht->size = 53;
+// 	ht->count = 0;
+// 	ht->elements = calloc((size_t)ht->size, sizeof(ht_element*));
+// 	return ht;
+// }
+
+static ht_hash_table* ht_new_sized(const int base_size){
+	ht_hash_table* ht = xmalloc(sizeof(ht_hash_table));
+	ht->base_size = base_size;
+	ht->size = next_prime(ht->base_size);
+
 	ht->count = 0;
-	ht->elements = calloc((size_t)ht->size, sizeof(ht_element*));
+	ht->elements = xcalloc((size_t)ht->size,sizeof(ht_element*));
 	return ht;
 }
+
+ht_hash_table* ht_new() {
+	return ht_new_sized(HT_INITIAL_BASE_SIZE);
+}
+
+static void ht_resize(ht_hash_table* ht, const int base_size){
+	if(base_size < HT_INITIAL_BASE_SIZE)
+	return;
+
+	ht_hash_table* new_ht = ht_new_sized(base_size);
+	for(int i = 0; i< ht->size; i++){
+		ht_element* element = ht->elements[i];
+		if(element != NULL && element != &HT_DELETED_ELEMENT){
+			ht_insert(new_ht, element->key, element->value);
+		}
+	}
+
+	ht->base_size = new_ht->base_size;
+	ht->count = new_ht->count;
+
+	const int tmp_size = ht->size;
+	ht->size = new_ht->size;
+	new_ht->size = tmp_size;
+
+	ht_element** tmp_elements = ht->elements;
+	ht->elements = new_ht->elements;
+	new_ht->elements = tmp_elements;
+
+	ht_del_hash_table(new_ht);
+
+}
+
+static void ht_resize_up(ht_hash_table* ht){
+	const int new_size = ht->base_size * 2;
+	ht_resize(ht, new_size);
+}
+static void ht_resize_down(ht_hash_table* ht){
+	const int new_size = ht->base_size / 2;
+	ht_resize(ht, new_size);
+}
+
 
 //functions for deleting ht_item s and ht_hash_tables, which free the memory we've allocated
 static void ht_del_item(ht_element* i) {
@@ -139,12 +195,18 @@ static int ht_GetHashIndex(const char*s, const int num_buckets, const int attemp
 
 // To insert a new key-value pair, we iterate through indexes until we find an empty bucket, 
 //then we insert the item into the bucket and increment the hash table's count attribute.
+// we ignore and jump over deleted nodes
+// if the load above 70, we resize up
 void ht_insert(ht_hash_table* ht, const char* key, const char* value){
+	const int load = ht->count *100 / ht->size;
+	if(load > 70){
+		ht_resize_up(ht);
+	}
 	ht_element* element = ht_new_element(key, value);
 	int index = ht_GetHashIndex(element->key,ht->size,0);
 	ht_element* cur_element = ht->elements[index];
 	int i = 1;
-	while(cur_element != NULL){  //if cur_element == NULL, means we find an empty bucket, otherwise collision happen
+	while(cur_element != NULL && cur_element != &HT_DELETED_ELEMENT){  //if cur_element == NULL, means we find an empty bucket, otherwise collision happen
 		index = ht_GetHashIndex(element->key, ht->size, i);
 		cur_element = ht->elements[index];
 		i++;
@@ -153,16 +215,18 @@ void ht_insert(ht_hash_table* ht, const char* key, const char* value){
 	ht->count++;
 
 }
-//
+// if we hit a deleted node, we could insert the new node into the deleted slot
 char* ht_search(ht_hash_table* ht, const char* key){
 	int index = ht_GetHashIndex(key, ht->size, 0);
 	ht_element* element = ht->elements[index];// find the specific bucket based on the key and the hash table
 	int i = 1; //for collision
 	while(element != NULL){
 
-		//if the element's key matches the key we're searching for, we return the element's value.
-		if(strcmp(element->key,key) == 0){ 
-			return element->value;
+		if(element != &HT_DELETED_ELEMENT){
+			//if the element's key matches the key we're searching for, we return the element's value.
+			if(strcmp(element->key,key) == 0){ 
+				return element->value;
+		}
 		}
 		index = ht_GetHashIndex(key, ht->size, i);
 		element = ht->elements[index];
@@ -173,6 +237,29 @@ char* ht_search(ht_hash_table* ht, const char* key){
 }
 
 //we simply mark it as deleted
+//if the load below 10, we resize down
 void ht_delete(ht_hash_table* ht, const char* key){
+	const int load = ht->count *100 / ht->size;
+	if(load < 10){
+		ht_resize_down(ht);
+	}
+
+	int index = ht_GetHashIndex(key, ht->size, 0);
+	ht_element* element = ht->elements[index];
+	int i = 1;
+	while(element != NULL){
+		if(element != &HT_DELETED_ELEMENT){
+			if(strcmp(element->key, key) == 0 ){
+				ht_del_element(element);
+				ht->elements[index] = &HT_DELETED_ELEMENT;
+			}
+		}
+		index = ht_GetHashIndex(key, ht->size, i);
+		element = ht->elements[index];
+		i++;
+	}
+	ht->count--;
 	
 }
+
+//TODO UPDATE

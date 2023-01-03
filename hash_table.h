@@ -13,6 +13,7 @@ typedef struct {
 typedef struct {
 	int size;      // size of the array
 	int count;	   // numbers of elements in the hash table
+	int base_size;
 	ht_element** elements;
 } ht_hash_table;
 
@@ -20,9 +21,24 @@ typedef struct {
 ht_element* ht_new_element(const char*k, const char* v) {
 
 }
+ht_hash_table* ht_new_sized(const int base_size){
+
+}
 
 // Initialise a new hash table
 ht_hash_table* ht_new() {
+
+}
+
+void ht_resize(ht_hash_table* ht, const int base_size){
+
+}
+
+void ht_resize_up(ht_hash_table* ht){
+
+}
+
+void ht_resize_down(ht_hash_table* ht){
 
 }
 
