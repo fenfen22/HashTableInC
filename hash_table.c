@@ -137,7 +137,7 @@ static int ht_GetHashIndex(const char*s, const int num_buckets, const int attemp
 
 //hash function will implement the following API
 
-// to insert a new key-value pair, we iterate through indexes until we find an empty bucket, 
+// To insert a new key-value pair, we iterate through indexes until we find an empty bucket, 
 //then we insert the item into the bucket and increment the hash table's count attribute.
 void ht_insert(ht_hash_table* ht, const char* key, const char* value){
 	ht_element* element = ht_new_element(key, value);
@@ -153,9 +153,26 @@ void ht_insert(ht_hash_table* ht, const char* key, const char* value){
 	ht->count++;
 
 }
+//
 char* ht_search(ht_hash_table* ht, const char* key){
+	int index = ht_GetHashIndex(key, ht->size, 0);
+	ht_element* element = ht->elements[index];// find the specific bucket based on the key and the hash table
+	int i = 1; //for collision
+	while(element != NULL){
+
+		//if the element's key matches the key we're searching for, we return the element's value.
+		if(strcmp(element->key,key) == 0){ 
+			return element->value;
+		}
+		index = ht_GetHashIndex(key, ht->size, i);
+		element = ht->elements[index];
+		i++;
+	}
+	return NULL; //it means the while loop hits a NULL bucket, we return NULL, to indicate that no value was found.
 
 }
+
+//we simply mark it as deleted
 void ht_delete(ht_hash_table* ht, const char* key){
 	
 }
